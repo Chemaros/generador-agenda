@@ -73,7 +73,7 @@ if submit_button:
         <html>
         <head>
             <style>
-                body {{ font-family: 'Arial', sans-serif; width: 800px; margin: 0; padding: 0; text-align: center; background-color: #FFFFFF; }}
+                body {{ font-family: 'Arial', sans-serif; width: 800px; margin: 0; padding: 0; text-align: center; overflow: hidden; background-color: #FFFFFF; }}
                 .header {{ background-color: #e30613; color: white; padding: 20px; font-size: 28px; font-weight: bold; }}
                 .container {{ padding: 40px; }}
                 .evento {{ margin-bottom: 40px; }}
