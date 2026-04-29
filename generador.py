@@ -22,8 +22,8 @@ with st.form("formulario_agenda"):
     with col_a:
         num_eventos = st.number_input("Número total de eventos:", min_value=1, value=1, step=1)
     with col_b:
-        # NUEVO: Control para decidir cuántos eventos caben en una sola imagen
-        eventos_por_pag = st.number_input("Eventos por página (para no cortar la imagen):", min_value=1, value=4, step=1)
+        # RECUPERADO: Control para decidir cuántos eventos caben en una sola imagen
+        eventos_por_pag = st.number_input("Eventos por página:", min_value=1, value=4, step=1)
     
     st.subheader("Detalles de los Eventos")
     eventos_datos = []
@@ -58,24 +58,22 @@ if submit_button:
             encoded_string = base64.b64encode(logo_file.read()).decode()
             etiqueta_logo = f'<img src="data:image/png;base64,{encoded_string}" style="max-width: 150px; margin-bottom: 10px;"><br>'
 
-        # NUEVO: Dividir la lista total de eventos en "páginas" o "trozos"
-        # Esto crea una lista de listas. Ej: si hay 10 eventos y caben 4 por pag -> [[4], [4], [2]]
+        # Dividir la lista total de eventos en páginas según lo que elija el usuario
         paginas_de_eventos = [eventos_datos[i:i + int(eventos_por_pag)] for i in range(0, len(eventos_datos), int(eventos_por_pag))]
 
         # Preparar la herramienta de captura de imágenes
         hti = Html2Image(custom_flags=['--no-sandbox', '--disable-gpu'])
         
-        # NUEVO: Crear un "archivo ZIP" virtual en la memoria del servidor
+        # Crear un "archivo ZIP" virtual en la memoria
         archivo_zip_en_memoria = io.BytesIO()
         
-        # Abrimos ese ZIP para empezar a meterle las fotos
         with zipfile.ZipFile(archivo_zip_en_memoria, "w") as zip_file:
             
-            # Repetimos el proceso por cada página que hayamos creado
+            # Repetimos el proceso por cada página
             for indice_pag, pagina_actual in enumerate(paginas_de_eventos):
                 html_eventos = ""
                 
-                # Procesar los eventos solo de esta página
+                # Procesar los eventos de la página actual
                 for ev in pagina_actual:
                     h = ev["hora"].upper()
                     d = ev["desc"].strip()  
@@ -89,24 +87,52 @@ if submit_button:
                     </div>
                     """
 
-                # Plantilla HTML/CSS (se genera una por cada página)
+                # Plantilla HTML/CSS corregida para que no corte el footer
                 html_completo = f"""
                 <html>
                 <head>
                     <style>
-                        body {{ font-family: 'Arial', sans-serif; width: 800px; margin: 0; padding: 0; text-align: center; background-color: #FFFFFF; }}
+                        /* Ocultamos la barra de desplazamiento visualmente para que no salga en la foto */
+                        ::-webkit-scrollbar {{
+                            display: none;
+                        }}
+                        
+                        body {{ 
+                            font-family: 'Arial', sans-serif; 
+                            width: 800px; 
+                            min-height: 1200px; /* Altura mínima en lugar de fija */
+                            margin: 0; 
+                            padding: 0; 
+                            text-align: center; 
+                            background-color: #FFFFFF;
+                            display: flex; 
+                            flex-direction: column; 
+                        }}
+                        
                         .header {{ background-color: #e30613; color: white; padding: 20px; font-size: 28px; font-weight: bold; }}
-                        .container {{ padding: 40px; }}
+                        
+                        .container {{ 
+                            padding: 40px; 
+                            flex-grow: 1; /* Empuja el footer hacia abajo de forma natural */
+                        }}
+                        
                         .evento {{ margin-bottom: 40px; }}
                         .hora-titulo {{ color: #e30613; font-size: 22px; margin-bottom: 5px; font-weight: bold; }}
                         .descripcion {{ color: #707070; font-size: 20px; margin-bottom: 5px; }}
                         .lugar {{ color: #000; font-size: 18px; }}
-                        .footer {{ border-top: 2px solid #e30613; margin-top: 50px; padding: 20px; display: flex; justify-content: space-around; align-items: flex-end; background-color: #FFFFFF; }}
+                        
+                        .footer {{ 
+                            border-top: 2px solid #e30613; 
+                            padding: 20px; 
+                            display: flex; 
+                            justify-content: space-around; 
+                            align-items: flex-end; 
+                            background-color: #FFFFFF; 
+                        }}
                         .bloque-izquierdo {{ text-align: center; }}
                     </style>
                 </head>
                 <body>
-                    <!-- Añadimos (Pág X) al título si hay más de una página -->
                     <div class="header">AGENDA {fecha_texto} DE 2026 {f'(PÁG {indice_pag + 1})' if len(paginas_de_eventos) > 1 else ''}</div>
                     <div class="container">
                         {html_eventos}
@@ -122,19 +148,18 @@ if submit_button:
                 </html>
                 """
                 
-                # Nombre único para cada imagen generada
                 ruta_salida = f'agenda_pag_{indice_pag + 1}.jpg'
                 
-                # Tomar la foto a esta página
+                # Tomar la foto (mantenemos 800x1200 como proporción estándar)
                 hti.screenshot(html_str=html_completo, save_as=ruta_salida, size=(800, 1200))
                 
-                # Leer la foto y guardarla dentro del archivo ZIP
+                # Guardar en el ZIP
                 with open(ruta_salida, "rb") as file:
                     zip_file.writestr(ruta_salida, file.read())
                     
     st.success("¡Imágenes generadas correctamente! Usa el botón de abajo para guardarlas.")
     
-    # 4. Botón para descargar el archivo ZIP con todas las imágenes
+    # 4. Botón para descargar el archivo ZIP
     st.download_button(
         label="📥 Descargar Agendas (Archivo ZIP)",
         data=archivo_zip_en_memoria.getvalue(),
