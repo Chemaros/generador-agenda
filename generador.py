@@ -50,11 +50,23 @@ if submit_button:
     with st.spinner("Maquetando y calculando el tamaño de las imágenes..."):
         fecha_texto = fecha.upper()
         
+       # --- NUEVA LÓGICA DEL LOGO ---
         etiqueta_logo = ""
+        
+        # CASO 1: El usuario subió un logo manualmente en la web
         if logo_file is not None:
             encoded_string = base64.b64encode(logo_file.read()).decode()
             etiqueta_logo = f'<img src="data:image/png;base64,{encoded_string}" style="max-width: 150px; margin-bottom: 10px;"><br>'
-
+            
+        # CASO 2: El usuario no subió nada, buscamos en el repositorio
+        else:
+            nombre_logo_defecto = "logo.png"
+            # Comprobamos si el archivo existe en la carpeta
+            if os.path.exists(nombre_logo_defecto):
+                with open(nombre_logo_defecto, "rb") as image_file:
+                    encoded_string = base64.b64encode(image_file.read()).decode()
+                    etiqueta_logo = f'<img src="data:image/png;base64,{encoded_string}" style="max-width: 150px; margin-bottom: 10px;"><br>'
+        # -----------------------------
         paginas_de_eventos = [eventos_datos[i:i + int(eventos_por_pag)] for i in range(0, len(eventos_datos), int(eventos_por_pag))]
 
         hti = Html2Image(custom_flags=['--no-sandbox', '--disable-gpu'])
