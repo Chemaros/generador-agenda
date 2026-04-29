@@ -63,7 +63,7 @@ if submit_button:
             nombre_logo_defecto = "logo.png"
             # Comprobamos si el archivo existe en la carpeta
             if os.path.exists(nombre_logo_defecto):
-                with open(nombre_logo_defecto, "rb") as image_file:
+                with open(logo.png, "rb") as image_file:
                     encoded_string = base64.b64encode(image_file.read()).decode()
                     etiqueta_logo = f'<img src="data:image/png;base64,{encoded_string}" style="max-width: 150px; margin-bottom: 10px;"><br>'
         # -----------------------------
