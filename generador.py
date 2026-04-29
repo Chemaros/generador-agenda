@@ -1,100 +1,74 @@
-import tkinter as tk
-from tkinter import messagebox
+import streamlit as st
 from html2image import Html2Image
 import base64
-import os
 
-class AgendaApp:
-    def __init__(self, root):
-        self.root = root
-        self.root.title("Generador de Agenda - PSOE Salamanca")
-        self.eventos_datos = []
-        
-        # --- Campos de la Agenda ---
-        tk.Label(root, text="Fecha de la Agenda (ej: MIÉRCOLES, 29 DE ABRIL):").pack(pady=5)
-        self.ent_fecha = tk.Entry(root, width=50)
-        self.ent_fecha.pack(pady=5)
-        
-        tk.Label(root, text="Número de eventos:").pack(pady=5)
-        self.ent_num = tk.Entry(root, width=10)
-        self.ent_num.pack(pady=5)
-        
-        # Botón para crear los campos de texto
-        tk.Button(root, text="Configurar Eventos", command=self.crear_campos_eventos).pack(pady=10)
-        
-        # Contenedor para scroll si hay muchos eventos
-        self.frame_eventos = tk.Frame(root)
-        self.frame_eventos.pack()
+# 1. Configuración básica de la página web
+st.set_page_config(page_title="Generador de Agenda", page_icon="📅")
 
-    def crear_campos_eventos(self):
-        # Limpiar campos previos
-        for widget in self.frame_eventos.winfo_children():
-            widget.destroy()
-        self.eventos_inputs = []
+st.title("Generador de Agenda - PSOE Salamanca")
+st.write("Rellena el formulario a continuación para generar la imagen de la agenda.")
+
+# 2. Creamos el formulario web
+with st.form("formulario_agenda"):
+    st.subheader("Datos Generales")
+    fecha = st.text_input("Fecha de la Agenda (ej: MIÉRCOLES, 29 DE ABRIL):")
+    
+    # Campo para subir el logo directamente desde la web
+    logo_file = st.file_uploader("Subir logo opcional (PNG o JPG):", type=["png", "jpg", "jpeg"])
+    
+    num_eventos = st.number_input("Número de eventos:", min_value=1, value=1, step=1)
+    
+    st.subheader("Detalles de los Eventos")
+    eventos_datos = []
+    
+    # Generamos los campos de texto según el número de eventos elegidos
+    for i in range(int(num_eventos)):
+        st.markdown(f"**Evento {i+1}**")
+        col1, col2 = st.columns(2)
+        with col1:
+            hora_titulo = st.text_input(f"Hora y Título (Rojo)", key=f"hora_{i}")
+            lugar = st.text_input(f"Lugar (Negrita)", key=f"lugar_{i}")
+        with col2:
+            desc = st.text_area(f"Descripción (Gris)", height=100, key=f"desc_{i}")
         
-        try:
-            n = int(self.ent_num.get())
-        except:
-            messagebox.showerror("Error", "Introduce un número válido")
-            return
+        # Guardamos los datos de este evento en nuestra lista
+        eventos_datos.append({
+            "hora": hora_titulo,
+            "desc": desc,
+            "lugar": lugar
+        })
+        st.markdown("---") # Línea separadora visual
+    
+    # Botón principal de la web
+    submit_button = st.form_submit_button("Generar Imagen JPG")
 
-        for i in range(n):
-            frame = tk.LabelFrame(self.frame_eventos, text=f"Evento {i+1}")
-            frame.pack(pady=5, fill="x")
-            
-            tk.Label(frame, text="Hora y Título (Rojo):").grid(row=0, column=0)
-            h = tk.Entry(frame, width=40)
-            h.grid(row=0, column=1)
-            
-            tk.Label(frame, text="Descripción (Gris):").grid(row=1, column=0)
-            d = tk.Text(frame, width=40, height=3)
-            d.grid(row=1, column=1)
-            
-            tk.Label(frame, text="Lugar (Negrita):").grid(row=2, column=0)
-            l = tk.Entry(frame, width=40)
-            l.grid(row=2, column=1)
-            
-            self.eventos_inputs.append((h, d, l))
-            
-        tk.Button(self.root, text="Generar JPG", command=self.generar_imagen, bg="red", fg="white").pack(pady=20)
-
-    def generar_imagen(self):
-        fecha = self.ent_fecha.get().upper()
+# 3. Lógica que se ejecuta al pulsar el botón "Generar Imagen JPG"
+if submit_button:
+    with st.spinner("Maquetando y generando la imagen..."):
+        fecha_texto = fecha.upper()
         html_eventos = ""
         
-        # --- Carga automática del logo ---
+        # Procesar el logo subido en la web para incrustarlo en el HTML
         etiqueta_logo = ""
-        nombre_archivo_logo = "logo.png" 
-        
-        if os.path.exists(nombre_archivo_logo):
-            try:
-                with open(nombre_archivo_logo, "rb") as image_file:
-                    encoded_string = base64.b64encode(image_file.read()).decode()
-                    etiqueta_logo = f'<img src="data:image/png;base64,{encoded_string}" style="max-width: 150px; margin-bottom: 10px;"><br>'
-            except Exception as e:
-                print("No se pudo cargar el logo:", e)
+        if logo_file is not None:
+            encoded_string = base64.b64encode(logo_file.read()).decode()
+            etiqueta_logo = f'<img src="data:image/png;base64,{encoded_string}" style="max-width: 150px; margin-bottom: 10px;"><br>'
 
-        # Construir el HTML de cada evento
-        for h, d, l in self.eventos_inputs:
-            # La hora y título siguen forzándose a mayúsculas
-            hora_titulo = h.get().upper()
-            
-            # La descripción respeta el formato original
-            desc = d.get("1.0", tk.END).strip()
-            
-            # --- CAMBIO REALIZADO AQUÍ ---
-            # Se ha eliminado el .upper() para respetar mayúsculas y minúsculas originales en el Lugar
-            lugar = l.get().strip()
+        # Procesar los textos respetando mayúsculas/minúsculas donde solicitaste
+        for ev in eventos_datos:
+            h = ev["hora"].upper()
+            d = ev["desc"].strip()  # Mantiene mayúsculas y minúsculas
+            l = ev["lugar"].strip() # Mantiene mayúsculas y minúsculas
             
             html_eventos += f"""
             <div class="evento">
-                <div class="hora-titulo">{hora_titulo}</div>
-                <div class="descripcion">{desc}</div>
-                <div class="lugar">LUGAR: <strong>{lugar}</strong></div>
+                <div class="hora-titulo">{h}</div>
+                <div class="descripcion">{d}</div>
+                <div class="lugar">LUGAR: <strong>{l}</strong></div>
             </div>
             """
 
-        # Plantilla CSS actualizada
+        # Diseño final en HTML y CSS
         html_completo = f"""
         <html>
         <head>
@@ -111,7 +85,7 @@ class AgendaApp:
             </style>
         </head>
         <body>
-            <div class="header">AGENDA {fecha} DE 2026</div>
+            <div class="header">AGENDA {fecha_texto} DE 2026</div>
             <div class="container">
                 {html_eventos}
             </div>
@@ -126,12 +100,23 @@ class AgendaApp:
         </html>
         """
         
-        # Convertir HTML a Imagen JPG
+        # 4. IMPORTANTE: Configuración especial para que funcione en el servidor de Streamlit
         hti = Html2Image(custom_flags=['--no-sandbox', '--disable-gpu'])
-        hti.screenshot(html_str=html_completo, save_as='agenda_generada.jpg', size=(800, 1200))
-        messagebox.showinfo("Éxito", "Imagen 'agenda_generada.jpg' creada correctamente.")
-
-if __name__ == "__main__":
-    root = tk.Tk()
-    app = AgendaApp(root)
-    root.mainloop()
+        ruta_salida = 'agenda_web_generada.jpg'
+        
+        # Generar la imagen
+        hti.screenshot(html_str=html_completo, save_as=ruta_salida, size=(800, 1200))
+        
+        # Leer la imagen generada para prepararla para la descarga
+        with open(ruta_salida, "rb") as file:
+            imagen_bytes = file.read()
+            
+    st.success("¡Imagen generada correctamente! Usa el botón de abajo para guardarla.")
+    
+    # 5. Botón para que el usuario descargue el JPG a su ordenador
+    st.download_button(
+        label="📥 Descargar Agenda en JPG",
+        data=imagen_bytes,
+        file_name="agenda_final.jpg",
+        mime="image/jpeg"
+    )
