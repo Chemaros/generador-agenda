@@ -3,7 +3,8 @@ from html2image import Html2Image
 import base64
 import zipfile
 import io
-from PIL import Image, ImageChops # NUEVO: Librerías para recortar la imagen
+import os # NUEVO: Librería para buscar archivos en la carpeta/repositorio
+from PIL import Image, ImageChops
 
 # 1. Configuración básica de la página web
 st.set_page_config(page_title="Generador de Agenda", page_icon="📅")
@@ -16,7 +17,7 @@ with st.form("formulario_agenda"):
     st.subheader("Datos Generales")
     fecha = st.text_input("Fecha de la Agenda (ej: MIÉRCOLES, 29 DE ABRIL):")
     
-    logo_file = st.file_uploader("Subir logo opcional (PNG o JPG):", type=["png", "jpg", "jpeg"])
+    logo_file = st.file_uploader("Subir logo opcional (Si lo dejas vacío, usará el logo por defecto):", type=["png", "jpg", "jpeg"])
     
     col_a, col_b = st.columns(2)
     with col_a:
@@ -50,7 +51,7 @@ if submit_button:
     with st.spinner("Maquetando y calculando el tamaño de las imágenes..."):
         fecha_texto = fecha.upper()
         
-       # --- NUEVA LÓGICA DEL LOGO ---
+        # --- NUEVA LÓGICA DEL LOGO ---
         etiqueta_logo = ""
         
         # CASO 1: El usuario subió un logo manualmente en la web
@@ -67,6 +68,7 @@ if submit_button:
                     encoded_string = base64.b64encode(image_file.read()).decode()
                     etiqueta_logo = f'<img src="data:image/png;base64,{encoded_string}" style="max-width: 150px; margin-bottom: 10px;"><br>'
         # -----------------------------
+
         paginas_de_eventos = [eventos_datos[i:i + int(eventos_por_pag)] for i in range(0, len(eventos_datos), int(eventos_por_pag))]
 
         hti = Html2Image(custom_flags=['--no-sandbox', '--disable-gpu'])
@@ -90,7 +92,6 @@ if submit_button:
                     </div>
                     """
 
-                # Plantilla HTML/CSS con la nueva "Caja Inteligente" (#wrapper)
                 html_completo = f"""
                 <html>
                 <head>
@@ -104,7 +105,6 @@ if submit_button:
                             background-color: #FFFFFF;
                         }}
                         
-                        /* Esta caja controla la altura. Mínimo 1200px, pero crece si hace falta */
                         #wrapper {{
                             width: 800px;
                             min-height: 1200px;
@@ -117,7 +117,7 @@ if submit_button:
                         
                         .container {{ 
                             padding: 40px; 
-                            flex-grow: 1; /* Empuja el footer hacia abajo */
+                            flex-grow: 1; 
                             text-align: center;
                         }}
                         
@@ -128,7 +128,7 @@ if submit_button:
                         
                         .footer {{ 
                             border-top: 2px solid #e30613; 
-                            padding: 20px 20px 40px 20px; /* Margen extra inferior para que respire */
+                            padding: 20px 20px 40px 20px; 
                             display: flex; 
                             justify-content: space-around; 
                             align-items: flex-end; 
@@ -157,34 +157,20 @@ if submit_button:
                 
                 ruta_salida = f'agenda_pag_{indice_pag + 1}.jpg'
                 
-                # 1. Tomamos una captura GIGANTE (4000px) para que nada se corte
                 hti.screenshot(html_str=html_completo, save_as=ruta_salida, size=(800, 4000))
                 
-                # --- NUEVO SISTEMA DE RECORTE CON PILLOW ---
-                # Abrimos la foto gigante generada
+                # Recorte automático con Pillow
                 img = Image.open(ruta_salida).convert("RGB")
-                
-                # Creamos un lienzo completamente blanco del mismo tamaño para comparar
                 fondo_blanco = Image.new("RGB", img.size, (255, 255, 255))
-                
-                # Calculamos la diferencia entre la foto y el lienzo blanco
-                # Esto nos dice dónde están todos los píxeles que NO son blancos (nuestros textos y bordes)
                 diferencia = ImageChops.difference(img, fondo_blanco)
                 caja_delimitadora = diferencia.getbbox()
                 
                 if caja_delimitadora:
-                    # caja_delimitadora[3] nos da la posición Y del último píxel con color (el final del footer)
-                    alto_del_contenido = caja_delimitadora[3] + 20 # Sumamos 20px para no cortar el margen blanco final
-                    
-                    # Decidimos la altura final: Si el contenido es menor a 1200, usamos 1200. Si es mayor, usamos la altura del contenido.
+                    alto_del_contenido = caja_delimitadora[3] + 20 
                     alto_final = max(1200, alto_del_contenido)
-                    
-                    # Recortamos la imagen usando esas coordenadas y la sobrescribimos
                     img_recortada = img.crop((0, 0, 800, alto_final))
                     img_recortada.save(ruta_salida)
-                # -------------------------------------------
                 
-                # Guardar en el ZIP la imagen ya recortada a su tamaño perfecto
                 with open(ruta_salida, "rb") as file:
                     zip_file.writestr(ruta_salida, file.read())
                     
