@@ -18,8 +18,12 @@ with st.form("formulario_agenda"):
     # Campo para subir el logo
     logo_file = st.file_uploader("Subir logo opcional (PNG o JPG):", type=["png", "jpg", "jpeg"])
     
-    # Eliminamos el selector de eventos por página, solo dejamos el total
-    num_eventos = st.number_input("Número total de eventos:", min_value=1, value=1, step=1)
+    col_a, col_b = st.columns(2)
+    with col_a:
+        num_eventos = st.number_input("Número total de eventos:", min_value=1, value=1, step=1)
+    with col_b:
+        # NUEVO: Control para decidir cuántos eventos caben en una sola imagen
+        eventos_por_pag = st.number_input("Eventos por página (para no cortar la imagen):", min_value=1, value=4, step=1)
     
     st.subheader("Detalles de los Eventos")
     eventos_datos = []
@@ -54,23 +58,24 @@ if submit_button:
             encoded_string = base64.b64encode(logo_file.read()).decode()
             etiqueta_logo = f'<img src="data:image/png;base64,{encoded_string}" style="max-width: 150px; margin-bottom: 10px;"><br>'
 
-        # FIJAMOS LA PAGINACIÓN A 5 EVENTOS
-        eventos_por_pag = 5
-        paginas_de_eventos = [eventos_datos[i:i + eventos_por_pag] for i in range(0, len(eventos_datos), eventos_por_pag)]
+        # NUEVO: Dividir la lista total de eventos en "páginas" o "trozos"
+        # Esto crea una lista de listas. Ej: si hay 10 eventos y caben 4 por pag -> [[4], [4], [2]]
+        paginas_de_eventos = [eventos_datos[i:i + int(eventos_por_pag)] for i in range(0, len(eventos_datos), int(eventos_por_pag))]
 
         # Preparar la herramienta de captura de imágenes
         hti = Html2Image(custom_flags=['--no-sandbox', '--disable-gpu'])
         
-        # Crear un "archivo ZIP" virtual en la memoria
+        # NUEVO: Crear un "archivo ZIP" virtual en la memoria del servidor
         archivo_zip_en_memoria = io.BytesIO()
         
+        # Abrimos ese ZIP para empezar a meterle las fotos
         with zipfile.ZipFile(archivo_zip_en_memoria, "w") as zip_file:
             
-            # Repetimos el proceso por cada página (cada bloque de 5 eventos)
+            # Repetimos el proceso por cada página que hayamos creado
             for indice_pag, pagina_actual in enumerate(paginas_de_eventos):
                 html_eventos = ""
                 
-                # Procesar los eventos de la página actual
+                # Procesar los eventos solo de esta página
                 for ev in pagina_actual:
                     h = ev["hora"].upper()
                     d = ev["desc"].strip()  
@@ -84,64 +89,28 @@ if submit_button:
                     </div>
                     """
 
-                # Plantilla HTML/CSS con los ajustes para ocultar barras de desplazamiento
+                # Plantilla HTML/CSS (se genera una por cada página)
                 html_completo = f"""
                 <html>
                 <head>
                     <style>
-                        /* Ocultar barra de desplazamiento en navegadores WebKit */
-                        ::-webkit-scrollbar {{
-                            display: none;
-                        }}
-                        
-                        /* Ajustes del cuerpo de la página */
-                        html, body {{ 
-                            font-family: 'Arial', sans-serif; 
-                            width: 800px; 
-                            height: 1200px; /* Fijamos la altura exacta de la foto */
-                            margin: 0; 
-                            padding: 0; 
-                            text-align: center; 
-                            background-color: #FFFFFF;
-                            overflow: hidden; /* Esto prohíbe las barras de desplazamiento */
-                            display: flex; /* Iniciamos Flexbox */
-                            flex-direction: column; /* Apilamos los elementos de arriba a abajo */
-                        }}
-                        
+                        body {{ font-family: 'Arial', sans-serif; width: 800px; margin: 0; padding: 0; text-align: center; background-color: #FFFFFF; }}
                         .header {{ background-color: #e30613; color: white; padding: 20px; font-size: 28px; font-weight: bold; }}
-                        
-                        /* El contenedor ocupa el espacio libre restante, empujando el footer abajo */
-                        .container {{ 
-                            padding: 40px; 
-                            flex-grow: 1; 
-                        }}
-                        
+                        .container {{ padding: 40px; }}
                         .evento {{ margin-bottom: 40px; }}
                         .hora-titulo {{ color: #e30613; font-size: 22px; margin-bottom: 5px; font-weight: bold; }}
                         .descripcion {{ color: #707070; font-size: 20px; margin-bottom: 5px; }}
                         .lugar {{ color: #000; font-size: 18px; }}
-                        
-                        .footer {{ 
-                            border-top: 2px solid #e30613; 
-                            padding: 20px; 
-                            display: flex; 
-                            justify-content: space-around; 
-                            align-items: flex-end; 
-                            background-color: #FFFFFF; 
-                        }}
+                        .footer {{ border-top: 2px solid #e30613; margin-top: 50px; padding: 20px; display: flex; justify-content: space-around; align-items: flex-end; background-color: #FFFFFF; }}
                         .bloque-izquierdo {{ text-align: center; }}
                     </style>
                 </head>
                 <body>
-                    <!-- Cabecera -->
+                    <!-- Añadimos (Pág X) al título si hay más de una página -->
                     <div class="header">AGENDA {fecha_texto} DE 2026 {f'(PÁG {indice_pag + 1})' if len(paginas_de_eventos) > 1 else ''}</div>
-                    
-                    <!-- Cuerpo de los Eventos -->
                     <div class="container">
                         {html_eventos}
                     </div>
-                    
-                    <!-- Pie de página (Footer) -->
                     <div class="footer">
                         <div class="bloque-izquierdo">
                             {etiqueta_logo}
@@ -153,18 +122,19 @@ if submit_button:
                 </html>
                 """
                 
+                # Nombre único para cada imagen generada
                 ruta_salida = f'agenda_pag_{indice_pag + 1}.jpg'
                 
-                # Tomar la foto
+                # Tomar la foto a esta página
                 hti.screenshot(html_str=html_completo, save_as=ruta_salida, size=(800, 1200))
                 
-                # Guardar en el ZIP
+                # Leer la foto y guardarla dentro del archivo ZIP
                 with open(ruta_salida, "rb") as file:
                     zip_file.writestr(ruta_salida, file.read())
                     
     st.success("¡Imágenes generadas correctamente! Usa el botón de abajo para guardarlas.")
     
-    # 4. Botón para descargar el archivo ZIP
+    # 4. Botón para descargar el archivo ZIP con todas las imágenes
     st.download_button(
         label="📥 Descargar Agendas (Archivo ZIP)",
         data=archivo_zip_en_memoria.getvalue(),
